@@ -306,7 +306,7 @@ function setPersistedAdmin(v){
 const DEFAULT_STATE = {
   business: {
     name: "Dune Sea Diagnostics",
-    phone: "(913) 213-1439",
+    phone: ($("#reqPhone")?.value?.trim() || ""),
     email: "service@duneseadiagnostics.com",
     area: "Kansas City Metro",
     addressLine: "Kansas City, MO",
@@ -351,6 +351,10 @@ function loadState(){
     const parsed = JSON.parse(raw);
     // Lightweight merge for new fields
     const merged = deepMerge(structuredClone(DEFAULT_STATE), parsed);
+    // Migration: business contact info is code-owned (not user-editable).
+    // If a prior version persisted different values in localStorage, force it back.
+    merged.business = structuredClone(DEFAULT_STATE.business);
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); }catch(e){}
     return merged;
   }catch(e){
     console.warn("State load failed; resetting.", e);
@@ -953,7 +957,7 @@ function onSubmitRequest(e){
     startISO,
     slots,
     name: $("#reqName").value.trim(),
-    phone: "(913) 213-1439",
+    phone: ($("#reqPhone")?.value?.trim() || ""),
     email: $("#reqEmail").value.trim(),
     serviceType: $("#reqServiceType").value,
     appliance: $("#reqAppliance").value.trim(),

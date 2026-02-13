@@ -351,6 +351,10 @@ function loadState(){
     const parsed = JSON.parse(raw);
     // Lightweight merge for new fields
     const merged = deepMerge(structuredClone(DEFAULT_STATE), parsed);
+    // Migration: business contact info is code-owned (not user-editable).
+    // If a prior version persisted different values in localStorage, force it back.
+    merged.business = structuredClone(DEFAULT_STATE.business);
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); }catch(e){}
     return merged;
   }catch(e){
     console.warn("State load failed; resetting.", e);
