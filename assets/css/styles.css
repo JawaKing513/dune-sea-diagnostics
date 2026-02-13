@@ -24,6 +24,7 @@ body{
     radial-gradient(900px 600px at 80% 20%, rgba(31,60,136,.06), transparent 60%),
     var(--bg);
   color:var(--text);
+  overflow-x:hidden; /* prevent page-wide horizontal swipe on mobile */
 }
 a{color:inherit;text-decoration:none}
 .container{max-width:1120px;margin:0 auto;padding:0 18px}
@@ -162,6 +163,11 @@ a{color:inherit;text-decoration:none}
   display:grid; grid-template-columns: 1fr 1fr; gap:16px;
 }
 @media(max-width:720px){.two-col{grid-template-columns:1fr}}
+
+/* Tighten vertical spacing on mobile so content starts sooner */
+@media (max-width: 540px){
+  .section{padding:28px 0}
+}
 
 /* Simple vertical stacking helper (used on Services page) */
 .stack{
@@ -311,6 +317,17 @@ textarea{min-height:96px; resize:vertical}
 .cal-grid{
   display:grid;
   grid-template-columns: 90px repeat(7, 1fr);
+  min-width: 860px; /* keeps columns readable; scrolls inside .cal-scroll on mobile */
+}
+
+/* Prevent the whole page from horizontally scrolling on mobile;
+   instead, allow scrolling inside the calendar grid container. */
+.cal-scroll{
+  width:100%;
+  overflow-x:auto;
+  -webkit-overflow-scrolling: touch;
+  border:1px solid var(--line);
+  border-radius: 16px;
 }
 .cal-head, .cal-time{
   padding:10px 10px;
