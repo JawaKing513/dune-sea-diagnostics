@@ -121,17 +121,19 @@ async function applyInventoryVisibility(){
 
     // Nav/menu link(s)
     const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
-    navInv.forEach(a => { a.style.display = hasInStock ? "" : "none"; });
+    navInv.forEach(a => { a.style.display = hasInStock ? "inline-flex" : "none"; });
 
     // Home "Browse Inventory" button (or any primary CTA button)
     const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
     if(homeBtn){
       if(hasInStock){
+        homeBtn.style.visibility = "visible";
         homeBtn.textContent = "Browse Inventory";
         homeBtn.setAttribute("href", "inventory.html");
         homeBtn.removeAttribute("aria-disabled");
         homeBtn.classList.remove("disabled");
       }else{
+        homeBtn.style.visibility = "visible";
         homeBtn.textContent = "Inventory: None In Stock";
         homeBtn.setAttribute("href", "contact.html");
         homeBtn.setAttribute("aria-disabled", "true");
