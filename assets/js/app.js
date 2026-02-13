@@ -109,6 +109,61 @@ async function fetchJson(url, opts){
   return data;
 }
 
+
+async function applyInventoryVisibility(){
+  // Hide Inventory links if there is nothing publicly "in stock".
+  // "In stock" for this site = any inventory item with status === "available".
+  try{
+    const base = getServerBase();
+    const j = await fetchJson(`${base}/api/inventory`, { method:"GET" });
+    const items = Array.isArray(j?.items) ? j.items : [];
+    const hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
+
+    // Nav/menu link(s)
+    const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
+    navInv.forEach(a => { a.style.display = hasInStock ? "" : "none"; });
+
+    // Home "Browse Inventory" button (or any primary CTA button)
+    const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
+    if(homeBtn){
+      if(hasInStock){
+        homeBtn.textContent = "Browse Inventory";
+        homeBtn.setAttribute("href", "inventory.html");
+        homeBtn.removeAttribute("aria-disabled");
+        homeBtn.classList.remove("disabled");
+      }else{
+        homeBtn.textContent = "Inventory: None In Stock";
+        homeBtn.setAttribute("href", "contact.html");
+        homeBtn.setAttribute("aria-disabled", "true");
+        homeBtn.classList.add("disabled");
+      }
+    }
+
+    // If user directly opens inventory.html while empty, show a friendly notice
+    const wrap = document.getElementById("inventoryWrap");
+    if(wrap && !hasInStock){
+      let note = document.getElementById("invEmptyNote");
+      if(!note){
+        note = document.createElement("div");
+        note.id = "invEmptyNote";
+        note.className = "card";
+        note.style.marginBottom = "14px";
+        note.innerHTML = `
+          <div class="card-inner">
+            <h2 style="margin:0 0 6px 0">No Inventory In Stock</h2>
+            <p style="margin:0">We don’t have any items available right now. Check back soon or reach out through the Contact page.</p>
+          </div>
+        `;
+        wrap.prepend(note);
+      }
+    }else{
+      const note = document.getElementById("invEmptyNote");
+      if(note) note.remove();
+    }
+  }catch(_){
+    // If we can't reach the server, don't hide anything (avoids false negatives).
+  }
+}
 async function loadServerSchedule(){
   try{
     const url = `${getServerBase()}/api/schedule`;
@@ -377,6 +432,7 @@ function startOfWeek(d){
 async function init(){
   // Load authoritative schedule from server
   await loadServerSchedule();
+  await applyInventoryVisibility();
   // Availability is also authoritative on the server
   if(serverSchedule.online){
     await loadServerAvailability();
