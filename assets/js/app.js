@@ -1266,30 +1266,15 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     const btn = document.querySelector(".navToggle");
     const nav = document.getElementById("topNav") || document.querySelector(".nav-links");
     if(btn && nav){
-      // Backdrop for mobile menu (tap outside to close)
-      let backdrop = document.querySelector(".navBackdrop");
-      if(!backdrop){
-        backdrop = document.createElement("div");
-        backdrop.className = "navBackdrop";
-        document.body.appendChild(backdrop);
-      }
-
       const setOpen = (open)=>{
         nav.classList.toggle("open", !!open);
         btn.setAttribute("aria-expanded", open ? "true" : "false");
-        document.body.classList.toggle("navOpen", !!open);
       };
       btn.addEventListener("click", ()=> setOpen(!nav.classList.contains("open")));
       // Close menu after clicking a link (mobile)
       nav.addEventListener("click", (e)=>{
         const a = e.target.closest && e.target.closest("a");
         if(a) setOpen(false);
-      });
-      // Close when tapping outside the menu
-      backdrop.addEventListener("click", ()=> setOpen(false));
-      // Close on Escape
-      window.addEventListener("keydown", (e)=>{
-        if(e.key === "Escape") setOpen(false);
       });
       // Close if window resized up to desktop
       window.addEventListener("resize", ()=>{
