@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dune Sea Diagnostics — Privacy & Terms</title>
+  <meta name="description" content="Privacy policy and terms for Dune Sea Diagnostics."/>
+  <link rel="stylesheet" href="assets/css/styles.css"/>
+</head>
+<body>
+<header class="nav">
+  <div class="container">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <div class="logo">DS</div>
+        <div>
+          <div class="name" id="bizName">Dune Sea Diagnostics</div>
+          <div class="tag">Appliance Repair • Buy/Sell • Rentals</div>
+        </div>
+      </a>
+
+      <button class="navToggle" aria-label="Menu" aria-controls="topNav" aria-expanded="false">☰</button>
+
+        <nav class="nav-links" id="topNav">
+        <a href="index.html">Home</a>
+        <a href="schedule.html">Schedule Service</a>
+        <a href="inventory.html">Inventory</a>
+        <a href="gallery.html">Gallery</a>
+          <a href="services.html">About</a>
+          <a href="contact.html">Contact</a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="section">
+    <div class="container">
+
+      <h2 id="privacy">Privacy Policy</h2>
+      <div class="card panel">
+        <p class="p" style="margin:0 0 10px;">
+          We only collect the information you choose to send us when you request service (for example: your name, phone number,
+          address, appliance details, and preferred times). We use this information to schedule and provide service, communicate
+          with you, and keep records for your job.
+        </p>
+        <div class="hr"></div>
+        <ul class="small" style="margin:0; padding-left:18px; line-height:1.8;">
+          <li><strong>We do not sell</strong> your personal information.</li>
+          <li>We may keep basic records for warranty, accounting, and customer support.</li>
+          <li>Requests and messages may be stored to operate the scheduling system.</li>
+        </ul>
+      </div>
+
+      <div class="hr"></div>
+
+      <h2 id="terms">Terms</h2>
+      <div class="card panel">
+        <ul class="small" style="margin:0; padding-left:18px; line-height:1.8;">
+          <li>Appointment requests are not final until confirmed.</li>
+          <li>Service availability can change due to parts, travel time, and prior jobs.</li>
+          <li>Prices are estimates until diagnosis is completed on-site.</li>
+          <li>By requesting service, you confirm you are authorized to schedule work at the address provided.</li>
+        </ul>
+        <div class="hr"></div>
+        <div class="small">Last updated: February 13, 2026</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+        <div>© <span id="year"></span> Dune Sea Diagnostics LLC • Kansas City, MO</div>
+        <div class="small"><a href="#privacy">Privacy</a> • <a href="#terms">Terms</a></div>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<script>
+  const y = document.getElementById("year");
+  if (y) y.textContent = new Date().getFullYear();
+</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

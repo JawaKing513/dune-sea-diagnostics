@@ -1,0 +1,12 @@
+{
+  "weekly": {
+    "0": {"enabled": false, "start": 8, "end": 18},
+    "1": {"enabled": true,  "start": 8, "end": 18},
+    "2": {"enabled": true,  "start": 8, "end": 18},
+    "3": {"enabled": true,  "start": 8, "end": 18},
+    "4": {"enabled": true,  "start": 8, "end": 18},
+    "5": {"enabled": true,  "start": 8, "end": 18},
+    "6": {"enabled": false, "start": 8, "end": 18}
+  },
+  "blocks": {}
+}

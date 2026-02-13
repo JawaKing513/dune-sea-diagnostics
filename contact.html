@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dune Sea Diagnostics — Contact</title>
+  <meta name="description" content="Contact Dune Sea Diagnostics for appliance repair, sales, and rentals in the Kansas City area."/>
+  <link rel="stylesheet" href="assets/css/styles.css"/>
+</head>
+<body>
+  <header class="nav">
+    <div class="container">
+      <div class="nav-inner">
+        <a class="brand" href="index.html">
+          <div class="logo">DS</div>
+          <div>
+            <div class="name" id="bizName">Dune Sea Diagnostics</div>
+            <div class="tag">Appliance Repair • Buy/Sell • Rentals</div>
+          </div>
+        </a>
+
+        <button class="navToggle" aria-label="Menu" aria-controls="topNav" aria-expanded="false">☰</button>
+
+        <nav class="nav-links" id="topNav">
+          <a href="index.html">Home</a>
+          <a href="schedule.html">Schedule Service</a>
+          <a href="inventory.html">Inventory</a>
+          <a href="gallery.html">Gallery</a>
+          <a href="services.html">About</a>
+          <a href="contact.html">Contact</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="section">
+      <div class="container">
+        <h2>Contact</h2>
+        <div class="small">Send us a message. (For now this is saved on the server and printed to the server console.)</div>
+        <div class="hr"></div>
+
+        <div class="card panel" style="max-width:760px; margin:0 auto;">
+          <form id="contactFormNew" class="stack" style="gap:12px;">
+            <div class="row" style="gap:10px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:240px;">
+                <label class="small">Name</label>
+                <input id="cName" type="text" placeholder="Your name" required />
+              </div>
+              <div style="flex:1; min-width:240px;">
+                <label class="small">Email</label>
+                <input id="cEmail" type="email" placeholder="you@example.com" required />
+              </div>
+            </div>
+
+            <div>
+              <label class="small">Type</label>
+              <select id="cType" required>
+                <option value="">Select one...</option>
+                <option>Appliance Repair</option>
+                <option>Sales</option>
+                <option>Rentals</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="small">Description</label>
+              <textarea id="cDesc" rows="6" placeholder="Tell us what you need help with..." required></textarea>
+            </div>
+
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <button class="btn" type="submit">Send Message</button>
+              <div class="small">Prefer a call? Use the phone number on the home page.</div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+        <div>© <span id="year"></span> Dune Sea Diagnostics LLC • Kansas City, MO</div>
+        <div class="small"><a href="info.html#privacy">Privacy</a> • <a href="info.html#terms">Terms</a></div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const y = document.getElementById("year");
+    if(y) y.textContent = new Date().getFullYear();
+  </script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

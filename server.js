@@ -281,7 +281,7 @@ const server = http.createServer((req, res) => {
   }
 
   // Health
-  if(req.method === "GET" && (req.url === "/" || req.url === "/health")){
+  if(req.method === "GET" && (req.url === "/health")){
     return send(res, 200, {
       "Content-Type":"text/plain; charset=utf-8",
       "Access-Control-Allow-Origin":"*",
@@ -310,6 +310,60 @@ const server = http.createServer((req, res) => {
       }, "not found");
     }
   }
+  // -------------------- Static site --------------------
+  // Serve the website (HTML/CSS/JS) from the repo root.
+  // NOTE: API routes live under /api/*
+  if(req.method === "GET" && req.url && !req.url.startsWith("/api/") && !req.url.startsWith("/uploads/")){
+    const PUBLIC_DIR = __dirname;
+    const urlPath = decodeURIComponent(req.url.split("?")[0] || "/");
+    const safePath = urlPath.replace(/^\/+/, ""); // remove leading /
+    let filePath = safePath ? path.join(PUBLIC_DIR, safePath) : path.join(PUBLIC_DIR, "index.html");
+
+    // If someone hits "/" or a directory, serve index.html
+    try{
+      if(urlPath === "/" || urlPath.endsWith("/")){
+        filePath = path.join(PUBLIC_DIR, "index.html");
+      }else{
+        // If no extension and an .html file exists, serve that (e.g. "/services" -> "services.html")
+        if(!path.extname(filePath)){
+          const htmlPath = filePath + ".html";
+          if(fs.existsSync(htmlPath)) filePath = htmlPath;
+        }
+      }
+
+      // Prevent directory traversal
+      const resolved = path.resolve(filePath);
+      if(!resolved.startsWith(path.resolve(PUBLIC_DIR))){
+        return send(res, 403, {"Content-Type":"text/plain; charset=utf-8"}, "Forbidden");
+      }
+      if(!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()){
+        return send(res, 404, {"Content-Type":"text/plain; charset=utf-8"}, "Not Found");
+      }
+
+      const ext = path.extname(resolved).toLowerCase();
+      const MIME = {
+        ".html":"text/html; charset=utf-8",
+        ".css":"text/css; charset=utf-8",
+        ".js":"application/javascript; charset=utf-8",
+        ".json":"application/json; charset=utf-8",
+        ".png":"image/png",
+        ".jpg":"image/jpeg",
+        ".jpeg":"image/jpeg",
+        ".webp":"image/webp",
+        ".svg":"image/svg+xml",
+        ".ico":"image/x-icon",
+        ".txt":"text/plain; charset=utf-8"
+      };
+      const ct = MIME[ext] || "application/octet-stream";
+      const body = fs.readFileSync(resolved);
+      return send(res, 200, {"Content-Type": ct}, body);
+    }catch(e){
+      console.error("[STATIC] error", e);
+      return send(res, 500, {"Content-Type":"text/plain; charset=utf-8"}, "Server Error");
+    }
+  }
+
+
 
   // ✅ Load schedule table
   // Returns the authoritative server schedule (booked + pending)

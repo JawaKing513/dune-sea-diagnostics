@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dune Sea Diagnostics — Appliance Repair • Buy/Sell • Rentals</title>
+  <meta name="description" content="Dune Sea Diagnostics: appliance repair house calls, buy/sell appliances, and rentals in the Kansas City area."/>
+  <link rel="stylesheet" href="assets/css/styles.css"/>
+</head>
+<body>
+<header class="nav">
+    <div class="container">
+      <div class="nav-inner">
+        <a class="brand" href="index.html">
+          <div class="logo">DS</div>
+          <div>
+            <div class="name" id="bizName">Dune Sea Diagnostics</div>
+            <div class="tag">Appliance Repair • Buy/Sell • Rentals</div>
+          </div>
+        </a>
+
+        <button class="navToggle" aria-label="Menu" aria-controls="topNav" aria-expanded="false">☰</button>
+
+        <nav class="nav-links" id="topNav">
+          <a href="index.html">Home</a>
+          <a href="schedule.html">Schedule Service</a>
+          <a href="inventory.html">Inventory</a>
+          <a href="gallery.html">Gallery</a>
+          <a href="services.html">About</a>
+          <a href="contact.html">Contact</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+<main id="top">
+<section class="section" id="gallery">
+  <div class="container">
+    <h2>Gallery</h2>
+    <div class="small">A look at recent appliance repairs and installations.</div>
+    <div class="hr"></div>
+
+    <div id="galleryAdminPanel" class="card panel" style="display:none; margin-bottom:14px;">
+      <div style="font-weight:800">Manage Gallery</div>
+      <div class="small" style="margin-top:4px;">Upload new photos or delete existing ones (Ctrl+Shift+A to unlock).</div>
+      <div class="hr" style="margin:12px 0"></div>
+      <form id="galleryUploadForm" class="stack" style="gap:10px;">
+        <div class="row" style="gap:10px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:240px;">
+            <label class="small">Photo</label>
+            <input id="galleryFile" type="file" accept="image/*" />
+          </div>
+          <div style="flex:2; min-width:240px;">
+            <label class="small">Caption (optional)</label>
+            <input id="galleryCaption" type="text" placeholder="e.g., Washer drain pump replacement" />
+          </div>
+        </div>
+        <div>
+          <button class="btn" type="submit">Upload Photo</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="gallery" id="jobsGallery"></div>
+  </div>
+</section>
+</main>
+<footer class="footer">
+  <div class="container">
+    <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+      <div>© <span id="year"></span> Dune Sea Diagnostics LLC • Kansas City, MO</div>
+      <div class="small"><a href="info.html#privacy">Privacy</a> • <a href="info.html#terms">Terms</a></div>
+    </div>
+  </div>
+</footer>
+<script>
+  const y = document.getElementById("year");
+  if(y) y.textContent = new Date().getFullYear();
+</script>
+  <script src="assets/js/app.js"></script>
+</body></html>
