@@ -306,7 +306,7 @@ function setPersistedAdmin(v){
 const DEFAULT_STATE = {
   business: {
     name: "Dune Sea Diagnostics",
-    phone: "(###) ###-####",
+    phone: "(913) 213-1439",
     email: "service@duneseadiagnostics.com",
     area: "Kansas City Metro",
     addressLine: "Kansas City, MO",
