@@ -307,7 +307,7 @@ const DEFAULT_STATE = {
   business: {
     name: "Dune Sea Diagnostics",
     phone: "(###) ###-####",
-    email: "duneseadiagnostics@example.com",
+    email: "service@duneseadiagnostics.com",
     area: "Kansas City Metro",
     addressLine: "Kansas City, MO",
   },

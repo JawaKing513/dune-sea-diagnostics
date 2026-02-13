@@ -953,7 +953,7 @@ function onSubmitRequest(e){
     startISO,
     slots,
     name: $("#reqName").value.trim(),
-    phone: "913 433 4778",
+    phone: "(913) 213-1439",
     email: $("#reqEmail").value.trim(),
     serviceType: $("#reqServiceType").value,
     appliance: $("#reqAppliance").value.trim(),
