@@ -2,8 +2,61 @@ const http = require("http");
 const { WebSocketServer } = require("ws");
 const fs = require("fs");
 const path = require("path");
+const nodemailer = require("nodemailer");
 
 const PORT = process.env.PORT || 8787;
+
+// -------------------- Email (Google Workspace / Gmail SMTP) --------------------
+// Set these environment variables on Render:
+//   GMAIL_USER=service@duneseadiagnostics.com
+//   GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   (App Password; no spaces is fine)
+// Optional:
+//   MAIL_TO=service@duneseadiagnostics.com   (where to receive contact form emails)
+//   MAIL_FROM=service@duneseadiagnostics.com (from address shown)
+// If not configured, the server will still store messages in data/messages.json.
+const GMAIL_USER = process.env.GMAIL_USER || "";
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || "";
+const MAIL_TO = process.env.MAIL_TO || GMAIL_USER || "";
+const MAIL_FROM = process.env.MAIL_FROM || GMAIL_USER || "";
+
+const mailer =
+  (GMAIL_USER && GMAIL_APP_PASSWORD)
+    ? nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+      })
+    : null;
+
+async function sendContactEmail(msg){
+  if(!mailer || !MAIL_TO || !MAIL_FROM) return { ok:false, skipped:true };
+  const safe = (v) => String(v || "").replace(/[<>]/g, "");
+  const subject = `New website contact: ${safe(msg.name) || "Unknown"} (${safe(msg.type) || "General"})`;
+
+  const html = `
+    <h2>New Contact Message</h2>
+    <p><strong>Name:</strong> ${safe(msg.name)}</p>
+    <p><strong>Email:</strong> ${safe(msg.email)}</p>
+    <p><strong>Type:</strong> ${safe(msg.type)}</p>
+    <p><strong>Received:</strong> ${safe(msg.createdISO)}</p>
+    <hr />
+    <p style="white-space:pre-wrap">${safe(msg.description)}</p>
+  `;
+
+  try{
+    await mailer.sendMail({
+      from: `"Dune Sea Diagnostics" <${MAIL_FROM}>`,
+      to: MAIL_TO,
+      replyTo: msg.email ? safe(msg.email) : undefined,
+      subject,
+      html
+    });
+    return { ok:true };
+  }catch(e){
+    console.error("[MAIL] send failed:", e);
+    return { ok:false, error:String(e) };
+  }
+}
+
 
 // -------------------- Persistence helpers --------------------
 const DATA_DIR = path.join(__dirname, "data");
@@ -510,8 +563,8 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // ✅ Receive contact message (prints to console; we will wire messaging later)
-  // Payload: { name, email, type, description }
+  // ✅ Receive contact message (stores to data/messages.json and emails service inbox if configured)
+// Payload: { name, email, type, description }
   if(req.method === "POST" && req.url === "/api/contact"){
     return readBodyJson(req, res, (payload)=>{
       const msg = {
@@ -524,8 +577,19 @@ const server = http.createServer((req, res) => {
       };
       MESSAGES.unshift(msg);
       persist();
-      console.log("\n[CONTACT] new message:");
+
+      console.log("
+[CONTACT] new message:");
       console.log(msg);
+
+      // Fire-and-forget email (we do not block the HTTP response on email success)
+      // If you want to block until email sends, we can switch this behavior.
+      sendContactEmail(msg).then((r)=>{
+        if(r?.ok) console.log("[MAIL] contact email sent");
+        else if(r?.skipped) console.log("[MAIL] skipped (mailer not configured)");
+        else console.log("[MAIL] failed", r?.error || "");
+      });
+
       return json(res, 200, { ok:true });
     });
   }
