@@ -111,34 +111,41 @@ async function fetchJson(url, opts){
 
 
 async function applyInventoryVisibility(){
-  // Flicker-free inventory gating:
-  // - Default CSS hides Inventory tab + Home CTA.
-  // - We only flip a single class on <html> once we know "in-stock" exists.
-  // - Admin mode (html.admin-on) always shows Inventory immediately.
-  const rootEl = document.documentElement;
-
-  // Always ensure the admin class matches current state (in case admin toggles in-page)
-  if(isAdmin) rootEl.classList.add("admin-on");
-  else rootEl.classList.remove("admin-on");
-
+  // Hide Inventory links/CTAs for public users if there is nothing "in stock".
+  // "In stock" = any inventory item with status === "available".
+  //
+  // IMPORTANT: Admin/Management mode must ALWAYS see Inventory so they can add items.
   try{
     const base = getServerBase();
     const j = await fetchJson(`${base}/api/inventory`, { method:"GET" });
     const items = Array.isArray(j?.items) ? j.items : [];
     const hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
 
-    // Only public users depend on inv-show; admins ignore it.
-    if(hasInStock) rootEl.classList.add("inv-show");
-    else rootEl.classList.remove("inv-show");
+    const showInventory = Boolean(isAdmin) || hasInStock;
 
-    // Update CTA label without touching layout (CSS controls visibility)
+    // Nav/menu link(s)
+    const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
+    navInv.forEach(a => { a.style.display = showInventory ? "inline-flex" : "none"; });
+
+    // Home "Browse Inventory" button (or any primary CTA button)
+    // - Public + empty: hide the button entirely (no flicker CTA)
+    // - Admin: show as "Manage Inventory" even if empty
     const homeBtn = document.querySelector('a.btn[href="inventory.html"], a.btn[data-inventory-cta="1"]');
     if(homeBtn){
-      if(isAdmin && !hasInStock) homeBtn.textContent = "Manage Inventory";
-      else homeBtn.textContent = "Browse Inventory";
-      homeBtn.setAttribute("href","inventory.html");
-      homeBtn.removeAttribute("aria-disabled");
-      homeBtn.classList.remove("disabled");
+      if(showInventory){
+        homeBtn.style.display = "inline-flex";
+        homeBtn.style.visibility = "visible";
+        if(isAdmin && !hasInStock){
+          homeBtn.textContent = "Manage Inventory";
+        }else{
+          homeBtn.textContent = "Browse Inventory";
+        }
+        homeBtn.setAttribute("href", "inventory.html");
+        homeBtn.removeAttribute("aria-disabled");
+        homeBtn.classList.remove("disabled");
+      }else{
+        homeBtn.style.display = "none";
+      }
     }
 
     // If user directly opens inventory.html while empty AND not admin, show a friendly notice
@@ -163,18 +170,17 @@ async function applyInventoryVisibility(){
       if(note) note.remove();
     }
   }catch(_){
-    // If we can't reach the server:
-    // - Avoid "hide-then-show" flicker by just showing Inventory (public can still click through).
-    rootEl.classList.add("inv-show");
-
-    // Still keep admin class correct
-    if(isAdmin) rootEl.classList.add("admin-on");
-    else rootEl.classList.remove("admin-on");
+    // If we can't reach the server, don't hide anything (avoids false negatives),
+    // but still ensure admins can reach Inventory.
+    const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
+    if(isAdmin){
+      navInv.forEach(a => { a.style.display = "inline-flex"; });
+      const homeBtn = document.querySelector('a.btn[href="inventory.html"], a.btn[data-inventory-cta="1"]');
+      if(homeBtn) homeBtn.style.display = "inline-flex";
+    }
   }
 }
-
-
-function loadServerSchedule(){
+async function loadServerSchedule(){
   try{
     const url = `${getServerBase()}/api/schedule`;
     const j = await fetchJson(url, { method:"GET" });
@@ -915,12 +921,6 @@ function setAdmin(v){
   isAdmin = v;
   setPersistedAdmin(v);
   document.body.dataset.admin = v ? "1" : "0";
-  // Keep <html> classes in sync for flicker-free Inventory gating
-  if(v) document.documentElement.classList.add("admin-on");
-  else document.documentElement.classList.remove("admin-on");
-  // Re-evaluate inventory visibility (public vs admin) without layout flicker
-  applyInventoryVisibility();
-
 
   // Public pages should not show any admin indicator unless admin is ON.
   setText("#adminPill", "Management: ON");
