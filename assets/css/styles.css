@@ -49,7 +49,6 @@ a{color:inherit;text-decoration:none}
   box-shadow: none;
   width:auto;
   height:auto;
-  border-radius: 12px;
 }
 
 .brand .name{font-weight:800; letter-spacing:.3px}
@@ -469,16 +468,17 @@ html.admin-on.inv-pending a.btn[href="inventory.html"]{
 
 
 
+  width:auto;
   height:auto;
-  border-radius: 12px;
 }
 
 .logo img{
-  height:56px;
+  height:42px;
   width:auto;
   display:block;
   object-fit:contain;
 }
+
 @media (max-width: 900px){
-  .logo img{ height:48px; }
+  .logo img{ height:36px; }
 }
