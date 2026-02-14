@@ -448,3 +448,20 @@ textarea{min-height:96px; resize:vertical}
   gap:6px;
   margin-left:auto;
 }
+
+
+
+/* Inventory gating (prevents flicker/layout gaps)
+   - Default: hide Inventory nav + Home CTA until server confirms in-stock items.
+   - Admin mode (persisted) always shows Inventory for management.
+*/
+a[data-inv-link="1"],
+a[data-inventory-cta="1"]{
+  display: none;
+}
+html.inv-show a[data-inv-link="1"],
+html.inv-show a[data-inventory-cta="1"],
+html.admin-on a[data-inv-link="1"],
+html.admin-on a[data-inventory-cta="1"]{
+  display: inline-flex;
+}
