@@ -6,6 +6,16 @@
 <title>Dune Sea Diagnostics — Appliance Repair • Buy/Sell • Rentals</title>
 <meta content="Dune Sea Diagnostics: appliance repair house calls, buy/sell appliances, and rentals in the Kansas City area." name="description"/>
 <link href="assets/css/styles.css" rel="stylesheet"/>
+  <script>
+    (function(){
+      try{
+        if(localStorage.getItem('dsd_admin_mode_v1')==='1'){
+          document.documentElement.classList.add('admin-on');
+          document.documentElement.classList.add('inv-show');
+        }
+      }catch(e){}
+    })();
+  </script>
 </head>
 <body>
 <header class="nav">

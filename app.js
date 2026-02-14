@@ -111,59 +111,73 @@ async function fetchJson(url, opts){
 
 
 async function applyInventoryVisibility(){
-  // Hide Inventory links if there is nothing publicly "in stock".
-  // "In stock" for this site = any inventory item with status === "available".
+  // Public:
+  //  - Hide Inventory nav + Home Inventory button until we confirm there is at least one
+  //    item with status === "available" on the server.
+  // Admin/Management:
+  //  - Always show Inventory, even if empty, so you can add items.
+  const root = document.documentElement;
+  const admin = getPersistedAdmin();
+
+  // If admin is persisted, reflect it immediately (also supported pre-paint in <head>).
+  if(admin){
+    root.classList.add("admin-on");
+    root.classList.add("inv-show");
+  }
+
+  let hasInStock = true;
+
   try{
     const base = getServerBase();
     const j = await fetchJson(`${base}/api/inventory`, { method:"GET" });
     const items = Array.isArray(j?.items) ? j.items : [];
-    const hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
-
-    // Nav/menu link(s)
-    const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
-    navInv.forEach(a => { a.style.display = hasInStock ? "inline-flex" : "none"; });
-
-    // Home "Browse Inventory" button (or any primary CTA button)
-    const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
-    if(homeBtn){
-      if(hasInStock){
-        homeBtn.style.visibility = "visible";
-        homeBtn.textContent = "Browse Inventory";
-        homeBtn.setAttribute("href", "inventory.html");
-        homeBtn.removeAttribute("aria-disabled");
-        homeBtn.classList.remove("disabled");
-      }else{
-        homeBtn.style.visibility = "visible";
-        homeBtn.textContent = "Inventory: None In Stock";
-        homeBtn.setAttribute("href", "contact.html");
-        homeBtn.setAttribute("aria-disabled", "true");
-        homeBtn.classList.add("disabled");
-      }
-    }
-
-    // If user directly opens inventory.html while empty, show a friendly notice
-    const wrap = document.getElementById("inventoryWrap");
-    if(wrap && !hasInStock){
-      let note = document.getElementById("invEmptyNote");
-      if(!note){
-        note = document.createElement("div");
-        note.id = "invEmptyNote";
-        note.className = "card";
-        note.style.marginBottom = "14px";
-        note.innerHTML = `
-          <div class="card-inner">
-            <h2 style="margin:0 0 6px 0">No Inventory In Stock</h2>
-            <p style="margin:0">We don’t have any items available right now. Check back soon or reach out through the Contact page.</p>
-          </div>
-        `;
-        wrap.prepend(note);
-      }
-    }else{
-      const note = document.getElementById("invEmptyNote");
-      if(note) note.remove();
-    }
+    hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
   }catch(_){
     // If we can't reach the server, don't hide anything (avoids false negatives).
+    root.classList.add("inv-show");
+    root.classList.add("inv-checked");
+    return;
+  }
+
+  if(admin){
+    // Admin always sees Inventory.
+    root.classList.add("inv-show");
+  }else{
+    // Public only sees Inventory if in-stock items exist.
+    root.classList.toggle("inv-show", !!hasInStock);
+  }
+  root.classList.add("inv-checked");
+
+  // Home CTA copy tweaks (no hiding/showing here; CSS handles visibility).
+  const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
+  if(homeBtn){
+    if(admin && !hasInStock){
+      homeBtn.textContent = "Manage Inventory";
+    }else{
+      homeBtn.textContent = "Browse Inventory";
+    }
+  }
+
+  // If user directly opens inventory.html while empty, show a friendly notice (public only).
+  const wrap = document.getElementById("inventoryWrap");
+  if(wrap && !hasInStock && !admin){
+    let note = document.getElementById("invEmptyNote");
+    if(!note){
+      note = document.createElement("div");
+      note.id = "invEmptyNote";
+      note.className = "card";
+      note.style.marginBottom = "14px";
+      note.innerHTML = `
+        <div class="card-inner">
+          <h2 style="margin:0 0 6px 0">No Inventory In Stock</h2>
+          <p style="margin:0">We don’t have any items available right now. Check back soon or reach out through the Contact page.</p>
+        </div>
+      `;
+      wrap.prepend(note);
+    }
+  }else{
+    const note = document.getElementById("invEmptyNote");
+    if(note) note.remove();
   }
 }
 async function loadServerSchedule(){
@@ -436,6 +450,9 @@ function startOfWeek(d){
 }
 
 async function init(){
+  // Reflect persisted management mode ASAP (helps avoid UI flicker)
+  isAdmin = getPersistedAdmin();
+  try{ document.documentElement.classList.toggle('admin-on', isAdmin); }catch(e){}
   // Load authoritative schedule from server
   await loadServerSchedule();
   await applyInventoryVisibility();

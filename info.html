@@ -6,6 +6,16 @@
   <title>Dune Sea Diagnostics — Privacy & Terms</title>
   <meta name="description" content="Privacy policy and terms for Dune Sea Diagnostics."/>
   <link rel="stylesheet" href="assets/css/styles.css"/>
+  <script>
+    (function(){
+      try{
+        if(localStorage.getItem('dsd_admin_mode_v1')==='1'){
+          document.documentElement.classList.add('admin-on');
+          document.documentElement.classList.add('inv-show');
+        }
+      }catch(e){}
+    })();
+  </script>
 </head>
 <body>
 <header class="nav">

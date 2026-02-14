@@ -55,9 +55,19 @@ a{color:inherit;text-decoration:none}
   padding:8px 10px;border-radius:12px; color:var(--muted);
 }
 
-/* Prevent Inventory nav/button flicker while we check server stock */
+/* Inventory visibility (no flicker / no layout shift)
+   - Default: hide Inventory nav + Home Inventory button until we know stock.
+   - Show for the public when <html> has .inv-show (set after inventory check).
+   - Always show for management mode when <html> has .admin-on (set before paint).
+*/
 .nav-links a[href="inventory.html"]{ display:none; }
-a.btn[href="inventory.html"]{ visibility:hidden; }
+a.btn[href="inventory.html"]{ display:none; }
+
+html.inv-show .nav-links a[href="inventory.html"],
+html.admin-on .nav-links a[href="inventory.html"]{ display:inline-flex; }
+
+html.inv-show a.btn[href="inventory.html"],
+html.admin-on a.btn[href="inventory.html"]{ display:inline-flex; }
 .nav-links a:hover{background:rgba(15,23,42,.05); color:var(--text)}
 
 /* Mobile nav toggle */
