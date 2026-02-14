@@ -58,43 +58,6 @@ async function sendContactEmail(msg){
 }
 
 
-
-async function sendScheduleRequestEmail(appt){
-  if(!mailer || !MAIL_TO || !MAIL_FROM) return { ok:false, skipped:true };
-  const safe = (v) => String(v || "").replace(/[<>]/g, "");
-  const subject = `New booking request: ${safe(appt.startISO) || "Unknown time"} (${safe(appt.name) || "Unknown"})`;
-
-  const html = `
-    <h2>New Booking Request</h2>
-    <p><strong>Requested slot:</strong> ${safe(appt.startISO)}</p>
-    <p><strong>Name:</strong> ${safe(appt.name)}</p>
-    <p><strong>Phone:</strong> ${safe(appt.phone)}</p>
-    <p><strong>Email:</strong> ${safe(appt.email)}</p>
-    <p><strong>Service Type:</strong> ${safe(appt.serviceType)}</p>
-    <p><strong>Appliance:</strong> ${safe(appt.appliance)}</p>
-    <p><strong>Slots:</strong> ${safe(appt.slots)}</p>
-    <p><strong>Received:</strong> ${safe(appt.createdISO)}</p>
-    <hr />
-    <p><strong>Notes:</strong></p>
-    <p style="white-space:pre-wrap">${safe(appt.notes) || "None"}</p>
-  `;
-
-  try{
-    await mailer.sendMail({
-      from: `"Dune Sea Diagnostics" <${MAIL_FROM}>`,
-      to: MAIL_TO,
-      replyTo: appt.email ? safe(appt.email) : undefined,
-      subject,
-      html
-    });
-    return { ok:true };
-  }catch(e){
-    console.error("[MAIL] booking request send failed:", e);
-    return { ok:false, error:String(e) };
-  }
-}
-
-
 // -------------------- Persistence helpers --------------------
 const DATA_DIR = path.join(__dirname, "data");
 const BOOKED_FILE = path.join(DATA_DIR, "booked.json");
@@ -468,7 +431,7 @@ const server = http.createServer((req, res) => {
 
   // ✅ Replace availability (admin)
   if(req.method === "POST" && req.url === "/api/availability/set"){
-    return readBodyJson(req, res, async (payload)=>{
+    return readBodyJson(req, res, (payload)=>{
       const next = normalizeAvailability(payload?.availability ?? payload);
       AVAILABILITY = next;
       persist();
@@ -632,7 +595,7 @@ const server = http.createServer((req, res) => {
 
   // ✅ Create a new pending request
   if(req.method === "POST" && req.url === "/api/schedule/request"){
-    return readBodyJson(req, res, async (payload)=>{
+    return readBodyJson(req, res, (payload)=>{
       const appt = normalizeAppt(payload, "pending");
       if(!appt.startISO){
         return json(res, 400, { ok:false, error:"Missing startISO" });
@@ -646,10 +609,6 @@ const server = http.createServer((req, res) => {
       PENDING.push(appt);
       persist();
       console.log(`\n[SCHEDULE] pending request  ${appt.startISO}  id=${appt.id}`);
-      const mailRes = await sendScheduleRequestEmail(appt);
-      if(mailRes?.skipped) console.log("[MAIL] skipped (mailer not configured)");
-      else if(mailRes?.ok) console.log("[MAIL] booking request email sent");
-      else console.log("[MAIL] failed", mailRes?.error || "");
       return json(res, 200, { ok:true, id: appt.id, pendingCount: PENDING.length });
     });
   }
