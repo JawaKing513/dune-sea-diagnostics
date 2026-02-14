@@ -111,39 +111,46 @@ async function fetchJson(url, opts){
 
 
 async function applyInventoryVisibility(){
-  // Hide Inventory links if there is nothing publicly "in stock".
-  // "In stock" for this site = any inventory item with status === "available".
+  // Hide Inventory links/CTAs for public users if there is nothing "in stock".
+  // "In stock" = any inventory item with status === "available".
+  //
+  // IMPORTANT: Admin/Management mode must ALWAYS see Inventory so they can add items.
   try{
     const base = getServerBase();
     const j = await fetchJson(`${base}/api/inventory`, { method:"GET" });
     const items = Array.isArray(j?.items) ? j.items : [];
     const hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
 
+    const showInventory = Boolean(isAdmin) || hasInStock;
+
     // Nav/menu link(s)
     const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
-    navInv.forEach(a => { a.style.display = hasInStock ? "inline-flex" : "none"; });
+    navInv.forEach(a => { a.style.display = showInventory ? "inline-flex" : "none"; });
 
     // Home "Browse Inventory" button (or any primary CTA button)
-    const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
+    // - Public + empty: hide the button entirely (no flicker CTA)
+    // - Admin: show as "Manage Inventory" even if empty
+    const homeBtn = document.querySelector('a.btn[href="inventory.html"], a.btn[data-inventory-cta="1"]');
     if(homeBtn){
-      if(hasInStock){
+      if(showInventory){
+        homeBtn.style.display = "inline-flex";
         homeBtn.style.visibility = "visible";
-        homeBtn.textContent = "Browse Inventory";
+        if(isAdmin && !hasInStock){
+          homeBtn.textContent = "Manage Inventory";
+        }else{
+          homeBtn.textContent = "Browse Inventory";
+        }
         homeBtn.setAttribute("href", "inventory.html");
         homeBtn.removeAttribute("aria-disabled");
         homeBtn.classList.remove("disabled");
       }else{
-        homeBtn.style.visibility = "visible";
-        homeBtn.textContent = "Inventory: None In Stock";
-        homeBtn.setAttribute("href", "contact.html");
-        homeBtn.setAttribute("aria-disabled", "true");
-        homeBtn.classList.add("disabled");
+        homeBtn.style.display = "none";
       }
     }
 
-    // If user directly opens inventory.html while empty, show a friendly notice
+    // If user directly opens inventory.html while empty AND not admin, show a friendly notice
     const wrap = document.getElementById("inventoryWrap");
-    if(wrap && !hasInStock){
+    if(wrap && !hasInStock && !isAdmin){
       let note = document.getElementById("invEmptyNote");
       if(!note){
         note = document.createElement("div");
@@ -163,7 +170,14 @@ async function applyInventoryVisibility(){
       if(note) note.remove();
     }
   }catch(_){
-    // If we can't reach the server, don't hide anything (avoids false negatives).
+    // If we can't reach the server, don't hide anything (avoids false negatives),
+    // but still ensure admins can reach Inventory.
+    const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
+    if(isAdmin){
+      navInv.forEach(a => { a.style.display = "inline-flex"; });
+      const homeBtn = document.querySelector('a.btn[href="inventory.html"], a.btn[data-inventory-cta="1"]');
+      if(homeBtn) homeBtn.style.display = "inline-flex";
+    }
   }
 }
 async function loadServerSchedule(){
@@ -928,7 +942,11 @@ function setAdmin(v){
   if($("#adminPanel")) renderAdminPanels();
   if($("#pendingTableBody") || $("#acceptedTableBody")) renderAppointmentsTables();
   try{ document.dispatchEvent(new CustomEvent("dsd_admin_change", { detail: { isAdmin: v } })); }catch(e){}
+
+  // Inventory visibility depends on admin/public state; refresh it when toggling.
+  try{ applyInventoryVisibility(); }catch(e){}
 }
+
 
 function onSubmitRequest(e){
   e.preventDefault();
