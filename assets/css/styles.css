@@ -482,3 +482,27 @@ html.admin-on.inv-pending a.btn[href="inventory.html"]{
 @media (max-width: 900px){
   .logo img{ height:36px; }
 }
+
+
+/* ===== Header Logo Size Fix (prevents giant logo) ===== */
+.nav .brand .logo,
+.nav .brand .logo img{
+  max-width: 240px;
+}
+.nav .brand .logo{
+  flex: 0 0 auto;
+}
+.nav .brand .logo img{
+  height: 60px !important;
+  width: auto !important;
+  max-height: 60px !important;
+  object-fit: contain;
+  display: block;
+}
+@media (max-width: 900px){
+  .nav .brand .logo img{
+    height: 44px !important;
+    max-height: 44px !important;
+  }
+}
+
