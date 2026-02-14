@@ -6,6 +6,25 @@ const nodemailer = require("nodemailer");
 
 const PORT = process.env.PORT || 8787;
 
+// -------------------- Static site root detection --------------------
+// Depending on how the repo was uploaded to Render, the site files may live in the repo root
+// or inside a nested folder. We auto-detect by looking for index.html.
+const SITE_ROOT = (() => {
+  const candidates = [
+    __dirname,
+    path.join(__dirname, "REPO"),
+    path.join(__dirname, "dune-sea-diagnostics-main"),
+    path.join(__dirname, "public"),
+    path.join(__dirname, "site"),
+  ];
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(path.join(dir, "index.html"))) return dir;
+    } catch {}
+  }
+  return __dirname;
+})();
+
 // -------------------- Email (Google Workspace / Gmail SMTP) --------------------
 // Set these environment variables on Render:
 //   GMAIL_USER=service@duneseadiagnostics.com
@@ -53,6 +72,43 @@ async function sendContactEmail(msg){
     return { ok:true };
   }catch(e){
     console.error("[MAIL] send failed:", e);
+    return { ok:false, error:String(e) };
+  }
+}
+
+
+
+async function sendScheduleRequestEmail(appt){
+  if(!mailer || !MAIL_TO || !MAIL_FROM) return { ok:false, skipped:true };
+  const safe = (v) => String(v || "").replace(/[<>]/g, "");
+  const subject = `New booking request: ${safe(appt.startISO) || "Unknown time"} (${safe(appt.name) || "Unknown"})`;
+
+  const html = `
+    <h2>New Booking Request</h2>
+    <p><strong>Requested slot:</strong> ${safe(appt.startISO)}</p>
+    <p><strong>Name:</strong> ${safe(appt.name)}</p>
+    <p><strong>Phone:</strong> ${safe(appt.phone)}</p>
+    <p><strong>Email:</strong> ${safe(appt.email)}</p>
+    <p><strong>Service Type:</strong> ${safe(appt.serviceType)}</p>
+    <p><strong>Appliance:</strong> ${safe(appt.appliance)}</p>
+    <p><strong>Slots:</strong> ${safe(appt.slots)}</p>
+    <p><strong>Received:</strong> ${safe(appt.createdISO)}</p>
+    <hr />
+    <p><strong>Notes:</strong></p>
+    <p style="white-space:pre-wrap">${safe(appt.notes) || "None"}</p>
+  `;
+
+  try{
+    await mailer.sendMail({
+      from: `"Dune Sea Diagnostics" <${MAIL_FROM}>`,
+      to: MAIL_TO,
+      replyTo: appt.email ? safe(appt.email) : undefined,
+      subject,
+      html
+    });
+    return { ok:true };
+  }catch(e){
+    console.error("[MAIL] booking request send failed:", e);
     return { ok:false, error:String(e) };
   }
 }
@@ -367,7 +423,7 @@ const server = http.createServer((req, res) => {
   // Serve the website (HTML/CSS/JS) from the repo root.
   // NOTE: API routes live under /api/*
   if(req.method === "GET" && req.url && !req.url.startsWith("/api/") && !req.url.startsWith("/uploads/")){
-    const PUBLIC_DIR = __dirname;
+    const PUBLIC_DIR = SITE_ROOT;
     const urlPath = decodeURIComponent(req.url.split("?")[0] || "/");
     const safePath = urlPath.replace(/^\/+/, ""); // remove leading /
     let filePath = safePath ? path.join(PUBLIC_DIR, safePath) : path.join(PUBLIC_DIR, "index.html");
@@ -431,7 +487,7 @@ const server = http.createServer((req, res) => {
 
   // ✅ Replace availability (admin)
   if(req.method === "POST" && req.url === "/api/availability/set"){
-    return readBodyJson(req, res, (payload)=>{
+    return readBodyJson(req, res, async (payload)=>{
       const next = normalizeAvailability(payload?.availability ?? payload);
       AVAILABILITY = next;
       persist();
@@ -595,7 +651,7 @@ const server = http.createServer((req, res) => {
 
   // ✅ Create a new pending request
   if(req.method === "POST" && req.url === "/api/schedule/request"){
-    return readBodyJson(req, res, (payload)=>{
+    return readBodyJson(req, res, async (payload)=>{
       const appt = normalizeAppt(payload, "pending");
       if(!appt.startISO){
         return json(res, 400, { ok:false, error:"Missing startISO" });
@@ -609,6 +665,10 @@ const server = http.createServer((req, res) => {
       PENDING.push(appt);
       persist();
       console.log(`\n[SCHEDULE] pending request  ${appt.startISO}  id=${appt.id}`);
+      const mailRes = await sendScheduleRequestEmail(appt);
+      if(mailRes?.skipped) console.log("[MAIL] skipped (mailer not configured)");
+      else if(mailRes?.ok) console.log("[MAIL] booking request email sent");
+      else console.log("[MAIL] failed", mailRes?.error || "");
       return json(res, 200, { ok:true, id: appt.id, pendingCount: PENDING.length });
     });
   }
