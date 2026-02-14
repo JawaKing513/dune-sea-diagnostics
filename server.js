@@ -578,8 +578,7 @@ const server = http.createServer((req, res) => {
       MESSAGES.unshift(msg);
       persist();
 
-      console.log("
-[CONTACT] new message:");
+      console.log("\n[CONTACT] new message:");
       console.log(msg);
 
       // Fire-and-forget email (we do not block the HTTP response on email success)
