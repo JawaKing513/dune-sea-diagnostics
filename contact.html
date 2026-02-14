@@ -1,21 +1,23 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
+  
+  <script>
+    // Set management-mode + inventory pending flags BEFORE first paint to prevent flicker
+    (function(){
+      try{
+        var html = document.documentElement;
+        var isAdmin = localStorage.getItem("dsd_admin_mode_v1") === "1";
+        if(isAdmin) html.classList.add("admin-on");
+        html.classList.add("inv-pending");
+      }catch(e){}
+    })();
+  </script>
+<meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Dune Sea Diagnostics — Contact</title>
   <meta name="description" content="Contact Dune Sea Diagnostics for appliance repair, sales, and rentals in the Kansas City area."/>
   <link rel="stylesheet" href="assets/css/styles.css"/>
-  <script>
-    (function(){
-      try{
-        if(localStorage.getItem('dsd_admin_mode_v1')==='1'){
-          document.documentElement.classList.add('admin-on');
-          document.documentElement.classList.add('inv-show');
-        }
-      }catch(e){}
-    })();
-  </script>
 </head>
 <body>
   <header class="nav">

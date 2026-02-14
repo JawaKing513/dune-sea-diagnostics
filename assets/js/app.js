@@ -111,46 +111,54 @@ async function fetchJson(url, opts){
 
 
 async function applyInventoryVisibility(){
-  // Hide Inventory links/CTAs for public users if there is nothing "in stock".
-  // "In stock" = any inventory item with status === "available".
-  //
-  // IMPORTANT: Admin/Management mode must ALWAYS see Inventory so they can add items.
+  // Prevent flicker by default-hiding inventory UI (via html.inv-pending in <head>)
+  // and only revealing after we know:
+  //  - user is in management mode (always show), OR
+  //  - server confirms there is at least one item with status === "available".
+  const html = document.documentElement;
+  const isAdminNow = getPersistedAdmin();
+
+  const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
+  const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
+
+  // If admin, show immediately (no waiting for server)
+  if(isAdminNow){
+    navInv.forEach(a => { a.style.display = "inline-flex"; });
+    if(homeBtn){
+      homeBtn.style.display = "inline-flex";
+      homeBtn.textContent = "Manage Inventory";
+      homeBtn.setAttribute("href", "inventory.html");
+      homeBtn.removeAttribute("aria-disabled");
+      homeBtn.classList.remove("disabled");
+    }
+    html.classList.remove("inv-pending");
+    return;
+  }
+
+  // Non-admin: keep hidden until server says there is stock
   try{
     const base = getServerBase();
     const j = await fetchJson(`${base}/api/inventory`, { method:"GET" });
     const items = Array.isArray(j?.items) ? j.items : [];
     const hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
 
-    const showInventory = Boolean(isAdmin) || hasInStock;
-
     // Nav/menu link(s)
-    const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
-    navInv.forEach(a => { a.style.display = showInventory ? "inline-flex" : "none"; });
+    navInv.forEach(a => { a.style.display = hasInStock ? "inline-flex" : "none"; });
 
-    // Home "Browse Inventory" button (or any primary CTA button)
-    // - Public + empty: hide the button entirely (no flicker CTA)
-    // - Admin: show as "Manage Inventory" even if empty
-    const homeBtn = document.querySelector('a.btn[href="inventory.html"], a.btn[data-inventory-cta="1"]');
+    // Home inventory CTA: remove entirely when empty (no gaps)
     if(homeBtn){
-      if(showInventory){
-        homeBtn.style.display = "inline-flex";
-        homeBtn.style.visibility = "visible";
-        if(isAdmin && !hasInStock){
-          homeBtn.textContent = "Manage Inventory";
-        }else{
-          homeBtn.textContent = "Browse Inventory";
-        }
+      homeBtn.style.display = hasInStock ? "inline-flex" : "none";
+      if(hasInStock){
+        homeBtn.textContent = "Browse Inventory";
         homeBtn.setAttribute("href", "inventory.html");
         homeBtn.removeAttribute("aria-disabled");
         homeBtn.classList.remove("disabled");
-      }else{
-        homeBtn.style.display = "none";
       }
     }
 
-    // If user directly opens inventory.html while empty AND not admin, show a friendly notice
+    // If user directly opens inventory.html while empty, show a friendly notice
     const wrap = document.getElementById("inventoryWrap");
-    if(wrap && !hasInStock && !isAdmin){
+    if(wrap && !hasInStock){
       let note = document.getElementById("invEmptyNote");
       if(!note){
         note = document.createElement("div");
@@ -170,14 +178,17 @@ async function applyInventoryVisibility(){
       if(note) note.remove();
     }
   }catch(_){
-    // If we can't reach the server, don't hide anything (avoids false negatives),
-    // but still ensure admins can reach Inventory.
-    const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
-    if(isAdmin){
-      navInv.forEach(a => { a.style.display = "inline-flex"; });
-      const homeBtn = document.querySelector('a.btn[href="inventory.html"], a.btn[data-inventory-cta="1"]');
-      if(homeBtn) homeBtn.style.display = "inline-flex";
+    // If we can't reach the server, don't hide anything (avoids false negatives).
+    navInv.forEach(a => { a.style.display = "inline-flex"; });
+    if(homeBtn){
+      homeBtn.style.display = "inline-flex";
+      homeBtn.textContent = "Browse Inventory";
+      homeBtn.setAttribute("href", "inventory.html");
+      homeBtn.removeAttribute("aria-disabled");
+      homeBtn.classList.remove("disabled");
     }
+  }finally{
+    html.classList.remove("inv-pending");
   }
 }
 async function loadServerSchedule(){
@@ -942,11 +953,7 @@ function setAdmin(v){
   if($("#adminPanel")) renderAdminPanels();
   if($("#pendingTableBody") || $("#acceptedTableBody")) renderAppointmentsTables();
   try{ document.dispatchEvent(new CustomEvent("dsd_admin_change", { detail: { isAdmin: v } })); }catch(e){}
-
-  // Inventory visibility depends on admin/public state; refresh it when toggling.
-  try{ applyInventoryVisibility(); }catch(e){}
 }
-
 
 function onSubmitRequest(e){
   e.preventDefault();

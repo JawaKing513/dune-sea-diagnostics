@@ -55,19 +55,9 @@ a{color:inherit;text-decoration:none}
   padding:8px 10px;border-radius:12px; color:var(--muted);
 }
 
-/* Inventory visibility (no flicker / no layout shift)
-   - Default: hide Inventory nav + Home Inventory button until we know stock.
-   - Show for the public when <html> has .inv-show (set after inventory check).
-   - Always show for management mode when <html> has .admin-on (set before paint).
-*/
+/* Prevent Inventory nav/button flicker while we check server stock */
 .nav-links a[href="inventory.html"]{ display:none; }
-a.btn[href="inventory.html"]{ display:none; }
-
-html.inv-show .nav-links a[href="inventory.html"],
-html.admin-on .nav-links a[href="inventory.html"]{ display:inline-flex; }
-
-html.inv-show a.btn[href="inventory.html"],
-html.admin-on a.btn[href="inventory.html"]{ display:inline-flex; }
+a.btn[href="inventory.html"]{ visibility:hidden; }
 .nav-links a:hover{background:rgba(15,23,42,.05); color:var(--text)}
 
 /* Mobile nav toggle */
@@ -458,3 +448,18 @@ textarea{min-height:96px; resize:vertical}
   gap:6px;
   margin-left:auto;
 }
+
+
+/* --- Inventory visibility: prevent flicker before JS/server check --- */
+html.inv-pending .nav-links a[href="inventory.html"],
+html.inv-pending a.btn[href="inventory.html"]{
+  display: none !important;
+}
+/* In management mode, always show Inventory links immediately */
+html.admin-on.inv-pending .nav-links a[href="inventory.html"]{
+  display: inline-flex !important;
+}
+html.admin-on.inv-pending a.btn[href="inventory.html"]{
+  display: inline-flex !important;
+}
+
