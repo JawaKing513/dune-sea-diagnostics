@@ -199,6 +199,8 @@ async function loadServerSchedule(){
     serverSchedule.pending = Array.isArray(j.pending) ? j.pending : [];
     serverSchedule.online = true;
 
+    try{ reconcileLocalAppointments(); }catch(_){ }
+
     console.log(`[schedule] server online. booked=${serverSchedule.booked.length} pending=${serverSchedule.pending.length}`);
     try{
       console.table([
@@ -291,7 +293,11 @@ async function postAvailability(path, payload){
 }
 
 function serverOnline(){
-  return !!(serverSchedule.online && serverAvailability.online);
+  // Schedule truth is independent of availability config
+  return !!serverSchedule.online;
+}
+function availabilityOnline(){
+  return !!serverAvailability.online;
 }
 
 // Keep schedule UI in sync across devices (phone/browser) by periodically refreshing
@@ -352,36 +358,6 @@ async function postSchedule(path, payload){
 
 const STORAGE_KEY = "dsd_site_v1";
 const ADMIN_MODE_KEY = "dsd_admin_mode_v1";
-
-const MY_REQ_KEY = "dsd_my_requests_v1";
-
-function loadMyRequests(){
-  try{
-    const raw = localStorage.getItem(MY_REQ_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  }catch(_){ return []; }
-}
-function saveMyRequests(arr){
-  try{ localStorage.setItem(MY_REQ_KEY, JSON.stringify(arr)); }catch(_){}
-}
-function rememberMyRequest(appt){
-  if(!appt || !appt.id) return;
-  const arr = loadMyRequests();
-  const idx = arr.findIndex(x => x && x.id === appt.id);
-  const row = { id: appt.id, startISO: appt.startISO, createdISO: appt.createdISO || new Date().toISOString() };
-  if(idx >= 0) arr[idx] = { ...arr[idx], ...row };
-  else arr.unshift(row);
-  // keep it small
-  const trimmed = arr.slice(0, 50);
-  saveMyRequests(trimmed);
-}
-function isMyRequestId(id){
-  if(!id) return false;
-  const arr = loadMyRequests();
-  return arr.some(x => x && x.id === id);
-}
-
 
 function getPersistedAdmin(){
   try{ return localStorage.getItem(ADMIN_MODE_KEY) === "1"; }
@@ -779,17 +755,16 @@ function renderCalendar(){
       const start = new Date(day);
       start.setHours(hh, mm, 0, 0);
 
-      const onlineSchedule = !!serverSchedule.online;
-      const onlineAvail = !!serverAvailability.online;
-      const online = onlineSchedule;
+      const online = serverOnline();
+       const availOnline = availabilityOnline();
       const appt = online ? findAppointmentByStart(start.toISOString()) : null;
       const dow = day.getDay();
-      const weeklyConf = (onlineAvail ? (serverAvailability.weekly?.[String(dow)] ?? serverAvailability.weekly?.[dow]) : null);
-      const weeklyEnabled = onlineAvail ? !!weeklyConf?.enabled : !!state.availability.weekly?.[String(dow)]?.enabled;
+      const weeklyConf = (availOnline ? (serverAvailability.weekly?.[String(dow)] ?? serverAvailability.weekly?.[dow]) : (state.availability.weekly?.[String(dow)] ?? state.availability.weekly?.[dow]));
+      const weeklyEnabled = !!weeklyConf?.enabled;
       const wStart = Number(weeklyConf?.start ?? state.availability.weekly?.[String(dow)]?.start ?? state.settings.openHour);
       const wEnd = Number(weeklyConf?.end ?? state.availability.weekly?.[String(dow)]?.end ?? state.settings.closeHour);
       const withinWeekly = (weeklyEnabled && hh >= wStart && hh < wEnd);
-      const blocked = onlineAvail ? isBlockedServer(dayISO, hh, mm) : false;
+      const blocked = availOnline ? isBlockedServer(dayISO, hh, mm) : isBlockedLocal(dayISO, hh, mm);
 
       let cls = "slot";
       let text = "Available";
@@ -799,10 +774,10 @@ function renderCalendar(){
         cls += " unavail";
         text = "Temporarily Unavailable";
       }else if(appt){
-        // Admin sees explicit status; public sees a clean generic "Unavailable"
-        // except for *their own* requests (tracked in localStorage), which show Pending/Reserved for confirmation.
+        // Admin sees explicit status + details, public sees clean "Unavailable"
+        // BUT: if this device submitted the request (localStorage), show Pending/Reserved for that customer only.
         if(!isAdmin){
-          const mine = isMyRequestId(appt.id);
+          const mine = (state.appointments || []).find(x=>String(x.id)===String(appt.id)) || getLocalMyApptForStart(start.toISOString());
           if(mine){
             if(appt.status === "pending"){
               cls += " pending";
@@ -881,6 +856,14 @@ function isBlockedServer(dateISO, hh, mm){
   return (blocks[key] ?? []).includes(t);
 }
 
+function isBlockedLocal(dateISO, hh, mm){
+  const key = dateISO;
+  const t = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+  const blocks = (state && state.availability && state.availability.blocks) ? state.availability.blocks : {};
+  return (blocks[key] ?? []).includes(t);
+}
+
+
 function blockSlotServer(startISO, shouldBlock){
   if(!serverOnline()){
     toast("Server offline.");
@@ -930,20 +913,50 @@ function blockSlotServer(startISO, shouldBlock){
     });
 }
 
+function _epoch(iso){
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+}
 function findAppointmentByStart(startISO){
+  const target = _epoch(startISO);
+  if(target == null) return null;
   const all = getAllScheduleRows();
-
-  // Compare by actual time instant (ms since epoch) instead of raw string equality.
-  // This avoids mismatches when one client sends an ISO string without timezone suffix ("Z")
-  // while another sends a full UTC ISO string. Both represent the same moment.
-  const target = Date.parse(String(startISO || ""));
-  if(!Number.isFinite(target)) return null;
-
+  // Compare by time instant, not raw string (prevents timezone / formatting mismatches)
   return all.find(a => {
-    if(!(a && (a.status==="pending" || a.status==="accepted"))) return false;
-    const t = Date.parse(String(a.startISO || ""));
-    return Number.isFinite(t) && t === target;
+    const t = _epoch(a.startISO);
+    return t != null && t === target && (a.status==="pending" || a.status==="accepted");
   }) || null;
+}
+function findAppointmentById(id){
+  if(!id) return null;
+  const all = getAllScheduleRows();
+  return all.find(a => String(a.id) === String(id)) || null;
+}
+function getLocalMyApptForStart(startISO){
+  const target = _epoch(startISO);
+  if(target == null) return null;
+  const arr = Array.isArray(state.appointments) ? state.appointments : [];
+  return arr.find(a=>{
+    const t=_epoch(a.startISO);
+    return t!=null && t===target && (a.status==="pending" || a.status==="accepted");
+  }) || null;
+}
+function reconcileLocalAppointments(){
+  // Keep customer's local confirmation in sync with server truth (pending -> accepted, etc.)
+  const arr = Array.isArray(state.appointments) ? state.appointments : [];
+  if(arr.length===0) return;
+  let changed = false;
+  for(const a of arr){
+    const server = findAppointmentById(a.id) || findAppointmentByStart(a.startISO);
+    if(server){
+      const nextStatus = server.status === "pending" ? "pending" : "accepted";
+      if(a.status !== nextStatus){
+        a.status = nextStatus;
+        changed = true;
+      }
+    }
+  }
+  if(changed) saveState(state);
 }
 
 function openRequestModal(startISO){
@@ -1098,6 +1111,18 @@ function onSubmitRequest(e){
 
   postSchedule(endpoint, appt)
     .then(async ()=>{
+      // Customer feedback layer (local) — lets this device show Pending/Reserved for its own request
+      if(!isAdmin){
+        try{
+          const arr = Array.isArray(state.appointments) ? state.appointments : [];
+          const exists = arr.some(x=>String(x.id)===String(appt.id));
+          if(!exists){
+            arr.push({ id: appt.id, startISO: appt.startISO, slots: appt.slots, status: "pending", createdISO: appt.createdISO });
+            state.appointments = arr;
+            saveState(state);
+          }
+        }catch(_){ }
+      }
       await loadServerSchedule();
       closeModal();
       toast(isAdmin ? "Booked." : "Request submitted!");

@@ -111,73 +111,84 @@ async function fetchJson(url, opts){
 
 
 async function applyInventoryVisibility(){
-  // Public:
-  //  - Hide Inventory nav + Home Inventory button until we confirm there is at least one
-  //    item with status === "available" on the server.
-  // Admin/Management:
-  //  - Always show Inventory, even if empty, so you can add items.
-  const root = document.documentElement;
-  const admin = getPersistedAdmin();
+  // Prevent flicker by default-hiding inventory UI (via html.inv-pending in <head>)
+  // and only revealing after we know:
+  //  - user is in management mode (always show), OR
+  //  - server confirms there is at least one item with status === "available".
+  const html = document.documentElement;
+  const isAdminNow = getPersistedAdmin();
 
-  // If admin is persisted, reflect it immediately (also supported pre-paint in <head>).
-  if(admin){
-    root.classList.add("admin-on");
-    root.classList.add("inv-show");
+  const navInv = document.querySelectorAll('.nav-links a[href="inventory.html"]');
+  const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
+
+  // If admin, show immediately (no waiting for server)
+  if(isAdminNow){
+    navInv.forEach(a => { a.style.display = "inline-flex"; });
+    if(homeBtn){
+      homeBtn.style.display = "inline-flex";
+      homeBtn.textContent = "Manage Inventory";
+      homeBtn.setAttribute("href", "inventory.html");
+      homeBtn.removeAttribute("aria-disabled");
+      homeBtn.classList.remove("disabled");
+    }
+    html.classList.remove("inv-pending");
+    return;
   }
 
-  let hasInStock = true;
-
+  // Non-admin: keep hidden until server says there is stock
   try{
     const base = getServerBase();
     const j = await fetchJson(`${base}/api/inventory`, { method:"GET" });
     const items = Array.isArray(j?.items) ? j.items : [];
-    hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
+    const hasInStock = items.some(it => String(it?.status || "").toLowerCase() === "available");
+
+    // Nav/menu link(s)
+    navInv.forEach(a => { a.style.display = hasInStock ? "inline-flex" : "none"; });
+
+    // Home inventory CTA: remove entirely when empty (no gaps)
+    if(homeBtn){
+      homeBtn.style.display = hasInStock ? "inline-flex" : "none";
+      if(hasInStock){
+        homeBtn.textContent = "Browse Inventory";
+        homeBtn.setAttribute("href", "inventory.html");
+        homeBtn.removeAttribute("aria-disabled");
+        homeBtn.classList.remove("disabled");
+      }
+    }
+
+    // If user directly opens inventory.html while empty, show a friendly notice
+    const wrap = document.getElementById("inventoryWrap");
+    if(wrap && !hasInStock){
+      let note = document.getElementById("invEmptyNote");
+      if(!note){
+        note = document.createElement("div");
+        note.id = "invEmptyNote";
+        note.className = "card";
+        note.style.marginBottom = "14px";
+        note.innerHTML = `
+          <div class="card-inner">
+            <h2 style="margin:0 0 6px 0">No Inventory In Stock</h2>
+            <p style="margin:0">We don’t have any items available right now. Check back soon or reach out through the Contact page.</p>
+          </div>
+        `;
+        wrap.prepend(note);
+      }
+    }else{
+      const note = document.getElementById("invEmptyNote");
+      if(note) note.remove();
+    }
   }catch(_){
     // If we can't reach the server, don't hide anything (avoids false negatives).
-    root.classList.add("inv-show");
-    root.classList.add("inv-checked");
-    return;
-  }
-
-  if(admin){
-    // Admin always sees Inventory.
-    root.classList.add("inv-show");
-  }else{
-    // Public only sees Inventory if in-stock items exist.
-    root.classList.toggle("inv-show", !!hasInStock);
-  }
-  root.classList.add("inv-checked");
-
-  // Home CTA copy tweaks (no hiding/showing here; CSS handles visibility).
-  const homeBtn = document.querySelector('a.btn[href="inventory.html"]');
-  if(homeBtn){
-    if(admin && !hasInStock){
-      homeBtn.textContent = "Manage Inventory";
-    }else{
+    navInv.forEach(a => { a.style.display = "inline-flex"; });
+    if(homeBtn){
+      homeBtn.style.display = "inline-flex";
       homeBtn.textContent = "Browse Inventory";
+      homeBtn.setAttribute("href", "inventory.html");
+      homeBtn.removeAttribute("aria-disabled");
+      homeBtn.classList.remove("disabled");
     }
-  }
-
-  // If user directly opens inventory.html while empty, show a friendly notice (public only).
-  const wrap = document.getElementById("inventoryWrap");
-  if(wrap && !hasInStock && !admin){
-    let note = document.getElementById("invEmptyNote");
-    if(!note){
-      note = document.createElement("div");
-      note.id = "invEmptyNote";
-      note.className = "card";
-      note.style.marginBottom = "14px";
-      note.innerHTML = `
-        <div class="card-inner">
-          <h2 style="margin:0 0 6px 0">No Inventory In Stock</h2>
-          <p style="margin:0">We don’t have any items available right now. Check back soon or reach out through the Contact page.</p>
-        </div>
-      `;
-      wrap.prepend(note);
-    }
-  }else{
-    const note = document.getElementById("invEmptyNote");
-    if(note) note.remove();
+  }finally{
+    html.classList.remove("inv-pending");
   }
 }
 async function loadServerSchedule(){
@@ -187,8 +198,8 @@ async function loadServerSchedule(){
     serverSchedule.booked = Array.isArray(j.booked) ? j.booked : [];
     serverSchedule.pending = Array.isArray(j.pending) ? j.pending : [];
     serverSchedule.online = true;
-    // Keep customer's local Pending/Reserved tags in sync with the server
-    reconcileLocalAppointmentsWithServer();
+
+    try{ reconcileLocalAppointments(); }catch(_){ }
 
     console.log(`[schedule] server online. booked=${serverSchedule.booked.length} pending=${serverSchedule.pending.length}`);
     try{
@@ -282,7 +293,11 @@ async function postAvailability(path, payload){
 }
 
 function serverOnline(){
-  return !!(serverSchedule.online && serverAvailability.online);
+  // Schedule truth is independent of availability config
+  return !!serverSchedule.online;
+}
+function availabilityOnline(){
+  return !!serverAvailability.online;
 }
 
 // Keep schedule UI in sync across devices (phone/browser) by periodically refreshing
@@ -343,36 +358,6 @@ async function postSchedule(path, payload){
 
 const STORAGE_KEY = "dsd_site_v1";
 const ADMIN_MODE_KEY = "dsd_admin_mode_v1";
-
-const MY_REQ_KEY = "dsd_my_requests_v1";
-
-function loadMyRequests(){
-  try{
-    const raw = localStorage.getItem(MY_REQ_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  }catch(_){ return []; }
-}
-function saveMyRequests(arr){
-  try{ localStorage.setItem(MY_REQ_KEY, JSON.stringify(arr)); }catch(_){}
-}
-function rememberMyRequest(appt){
-  if(!appt || !appt.id) return;
-  const arr = loadMyRequests();
-  const idx = arr.findIndex(x => x && x.id === appt.id);
-  const row = { id: appt.id, startISO: appt.startISO, createdISO: appt.createdISO || new Date().toISOString() };
-  if(idx >= 0) arr[idx] = { ...arr[idx], ...row };
-  else arr.unshift(row);
-  // keep it small
-  const trimmed = arr.slice(0, 50);
-  saveMyRequests(trimmed);
-}
-function isMyRequestId(id){
-  if(!id) return false;
-  const arr = loadMyRequests();
-  return arr.some(x => x && x.id === id);
-}
-
 
 function getPersistedAdmin(){
   try{ return localStorage.getItem(ADMIN_MODE_KEY) === "1"; }
@@ -519,9 +504,6 @@ function startOfWeek(d){
 }
 
 async function init(){
-  // Reflect persisted management mode ASAP (helps avoid UI flicker)
-  isAdmin = getPersistedAdmin();
-  try{ document.documentElement.classList.toggle('admin-on', isAdmin); }catch(e){}
   // Load authoritative schedule from server
   await loadServerSchedule();
   await applyInventoryVisibility();
@@ -773,17 +755,16 @@ function renderCalendar(){
       const start = new Date(day);
       start.setHours(hh, mm, 0, 0);
 
-      const onlineSchedule = !!serverSchedule.online;
-      const onlineAvail = !!serverAvailability.online;
-      const online = onlineSchedule;
+      const online = serverOnline();
+       const availOnline = availabilityOnline();
       const appt = online ? findAppointmentByStart(start.toISOString()) : null;
       const dow = day.getDay();
-      const weeklyConf = (onlineAvail ? (serverAvailability.weekly?.[String(dow)] ?? serverAvailability.weekly?.[dow]) : null);
-      const weeklyEnabled = onlineAvail ? !!weeklyConf?.enabled : !!state.availability.weekly?.[String(dow)]?.enabled;
+      const weeklyConf = (availOnline ? (serverAvailability.weekly?.[String(dow)] ?? serverAvailability.weekly?.[dow]) : (state.availability.weekly?.[String(dow)] ?? state.availability.weekly?.[dow]));
+      const weeklyEnabled = !!weeklyConf?.enabled;
       const wStart = Number(weeklyConf?.start ?? state.availability.weekly?.[String(dow)]?.start ?? state.settings.openHour);
       const wEnd = Number(weeklyConf?.end ?? state.availability.weekly?.[String(dow)]?.end ?? state.settings.closeHour);
       const withinWeekly = (weeklyEnabled && hh >= wStart && hh < wEnd);
-      const blocked = onlineAvail ? isBlockedServer(dayISO, hh, mm) : false;
+      const blocked = availOnline ? isBlockedServer(dayISO, hh, mm) : isBlockedLocal(dayISO, hh, mm);
 
       let cls = "slot";
       let text = "Available";
@@ -793,20 +774,17 @@ function renderCalendar(){
         cls += " unavail";
         text = "Temporarily Unavailable";
       }else if(appt){
-        // Admin sees explicit status; public sees generic Unavailable,
-        // except for the current customer's own request (local feedback layer).
+        // Admin sees explicit status + details, public sees clean "Unavailable"
+        // BUT: if this device submitted the request (localStorage), show Pending/Reserved for that customer only.
         if(!isAdmin){
-          const mine = findLocalAppointmentById(appt.id);
+          const mine = (state.appointments || []).find(x=>String(x.id)===String(appt.id)) || getLocalMyApptForStart(start.toISOString());
           if(mine){
             if(appt.status === "pending"){
               cls += " pending";
               text = "Pending";
-            }else if(appt.status === "accepted"){
+            }else{
               cls += " taken";
               text = "Reserved";
-            }else{
-              cls += " unavail";
-              text = "Unavailable";
             }
           }else{
             cls += " unavail";
@@ -878,6 +856,14 @@ function isBlockedServer(dateISO, hh, mm){
   return (blocks[key] ?? []).includes(t);
 }
 
+function isBlockedLocal(dateISO, hh, mm){
+  const key = dateISO;
+  const t = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+  const blocks = (state && state.availability && state.availability.blocks) ? state.availability.blocks : {};
+  return (blocks[key] ?? []).includes(t);
+}
+
+
 function blockSlotServer(startISO, shouldBlock){
   if(!serverOnline()){
     toast("Server offline.");
@@ -927,72 +913,50 @@ function blockSlotServer(startISO, shouldBlock){
     });
 }
 
+function _epoch(iso){
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+}
 function findAppointmentByStart(startISO){
+  const target = _epoch(startISO);
+  if(target == null) return null;
   const all = getAllScheduleRows();
-
-  // Compare by actual time instant (ms since epoch) instead of raw string equality.
-  // This avoids mismatches when one client sends an ISO string without timezone suffix ("Z")
-  // while another sends a full UTC ISO string. Both represent the same moment.
-  const target = Date.parse(String(startISO || ""));
-  if(!Number.isFinite(target)) return null;
-
+  // Compare by time instant, not raw string (prevents timezone / formatting mismatches)
   return all.find(a => {
-    if(!(a && (a.status==="pending" || a.status==="accepted"))) return false;
-    const t = Date.parse(String(a.startISO || ""));
-    return Number.isFinite(t) && t === target;
+    const t = _epoch(a.startISO);
+    return t != null && t === target && (a.status==="pending" || a.status==="accepted");
   }) || null;
 }
-
-/**
- * Customer feedback layer (localStorage):
- * We keep a small list of "my" requests locally so the customer can see
- * Pending/Reserved for their own slot, while everyone else sees "Unavailable".
- *
- * This is intentionally local-only (no login/session). If the customer switches
- * devices, they won't see their tags — that's expected unless we add identity.
- */
-function findLocalAppointmentById(id){
+function findAppointmentById(id){
   if(!id) return null;
-  const arr = Array.isArray(state.appointments) ? state.appointments : [];
-  return arr.find(a => a && a.id === id) || null;
+  const all = getAllScheduleRows();
+  return all.find(a => String(a.id) === String(id)) || null;
 }
-
-function reconcileLocalAppointmentsWithServer(){
-  // Only applies to non-admin (customer) view.
-  if(isAdmin) return;
+function getLocalMyApptForStart(startISO){
+  const target = _epoch(startISO);
+  if(target == null) return null;
   const arr = Array.isArray(state.appointments) ? state.appointments : [];
-  if(!arr.length) return;
-
-  const booked = Array.isArray(serverSchedule.booked) ? serverSchedule.booked : [];
-  const pending = Array.isArray(serverSchedule.pending) ? serverSchedule.pending : [];
-
-  const bookedIds = new Set(booked.map(a=>a?.id).filter(Boolean));
-  const pendingIds = new Set(pending.map(a=>a?.id).filter(Boolean));
-
-  const now = Date.now();
-  const next = [];
-
+  return arr.find(a=>{
+    const t=_epoch(a.startISO);
+    return t!=null && t===target && (a.status==="pending" || a.status==="accepted");
+  }) || null;
+}
+function reconcileLocalAppointments(){
+  // Keep customer's local confirmation in sync with server truth (pending -> accepted, etc.)
+  const arr = Array.isArray(state.appointments) ? state.appointments : [];
+  if(arr.length===0) return;
+  let changed = false;
   for(const a of arr){
-    if(!a || !a.id || !a.startISO) continue;
-
-    let status = a.status || "pending";
-    if(bookedIds.has(a.id)) status = "accepted";
-    else if(pendingIds.has(a.id)) status = "pending";
-    else{
-      // If the server no longer has this ID, keep it briefly so the user
-      // doesn't lose feedback instantly (helps on flaky connections).
-      const t = Date.parse(a.createdISO || a.startISO);
-      const ageDays = Number.isFinite(t) ? (now - t) / 86400000 : 999;
-      if(ageDays > 2) continue; // drop stale after 48h
+    const server = findAppointmentById(a.id) || findAppointmentByStart(a.startISO);
+    if(server){
+      const nextStatus = server.status === "pending" ? "pending" : "accepted";
+      if(a.status !== nextStatus){
+        a.status = nextStatus;
+        changed = true;
+      }
     }
-
-    next.push({ ...a, status });
   }
-
-  // Light prune: keep list from growing forever
-  next.sort((x,y)=>String(y.createdISO||y.startISO).localeCompare(String(x.createdISO||x.startISO)));
-  state.appointments = next.slice(0, 25);
-  try{ saveState(state); }catch(e){}
+  if(changed) saveState(state);
 }
 
 function openRequestModal(startISO){
@@ -1134,7 +1098,7 @@ function onSubmitRequest(e){
     startISO,
     slots,
     name: $("#reqName").value.trim(),
-    phone: $("#reqPhone").value.trim(),
+    phone: ($("#reqPhone")?.value?.trim() || ""),
     email: $("#reqEmail").value.trim(),
     serviceType: $("#reqServiceType").value,
     appliance: $("#reqAppliance").value.trim(),
@@ -1147,15 +1111,19 @@ function onSubmitRequest(e){
 
   postSchedule(endpoint, appt)
     .then(async ()=>{
-      // For customers, keep a local record so they can see Pending/Reserved feedback
-      // for *their* request only (others still appear as generic Unavailable).
+      // Customer feedback layer (local) — lets this device show Pending/Reserved for its own request
       if(!isAdmin){
-        const arr = Array.isArray(state.appointments) ? state.appointments : [];
-        state.appointments = [{ ...appt, status: "pending" }, ...arr.filter(x=>x && x.id !== appt.id)].slice(0, 25);
-        saveState(state);
+        try{
+          const arr = Array.isArray(state.appointments) ? state.appointments : [];
+          const exists = arr.some(x=>String(x.id)===String(appt.id));
+          if(!exists){
+            arr.push({ id: appt.id, startISO: appt.startISO, slots: appt.slots, status: "pending", createdISO: appt.createdISO });
+            state.appointments = arr;
+            saveState(state);
+          }
+        }catch(_){ }
       }
-
-      await loadServerSchedule(); // also reconciles local tags with server
+      await loadServerSchedule();
       closeModal();
       toast(isAdmin ? "Booked." : "Request submitted!");
       renderCalendar();

@@ -315,7 +315,13 @@ function normalizeAvailability(input){
 
 function normalizeAppt(a, status){
   // store the same shape the client uses, but ensure required fields exist
-  const startISO = String(a?.startISO || "");
+  let startISO = String(a?.startISO || "");
+  // Canonicalize to UTC ISO so all clients match the same slot value
+  try{
+    const t = Date.parse(startISO);
+    if(Number.isFinite(t)) startISO = new Date(t).toISOString();
+  }catch(_){ }
+
   const slots = Number(a?.slots || 1);
   return {
     id: String(a?.id || makeId()),
@@ -333,13 +339,14 @@ function normalizeAppt(a, status){
 }
 
 function hasStart(list, startISO){
-  const target = Date.parse(String(startISO || ""));
-  if(!Number.isFinite(target)) return false;
+  const t0 = Date.parse(startISO);
+  if(!Number.isFinite(t0)) return false;
   return list.some(x => {
-    const t = Date.parse(String(x?.startISO || ""));
-    return Number.isFinite(t) && t === target;
+    const t = Date.parse(x?.startISO);
+    return Number.isFinite(t) && t === t0;
   });
 }
+
 
 // -------------------- tiny HTTP helpers --------------------
 function send(res, status, headers, body){
@@ -689,7 +696,11 @@ const server = http.createServer((req, res) => {
         return json(res, 409, { ok:false, error:"Slot already booked" });
       }
       // If it existed as pending, remove that pending entry
-      PENDING = PENDING.filter(x => x.startISO !== appt.startISO);
+      PENDING = PENDING.filter(x => {
+        const t = Date.parse(x?.startISO);
+        const t0 = Date.parse(appt.startISO);
+        return !(Number.isFinite(t) && Number.isFinite(t0) && t === t0);
+      });
       BOOKED.push(appt);
       persist();
       console.log(`\n[SCHEDULE] booked job       ${appt.startISO}  id=${appt.id}`);
