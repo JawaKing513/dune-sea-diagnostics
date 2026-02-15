@@ -333,7 +333,12 @@ function normalizeAppt(a, status){
 }
 
 function hasStart(list, startISO){
-  return list.some(x => x && x.startISO === startISO);
+  const target = Date.parse(String(startISO || ""));
+  if(!Number.isFinite(target)) return false;
+  return list.some(x => {
+    const t = Date.parse(String(x?.startISO || ""));
+    return Number.isFinite(t) && t === target;
+  });
 }
 
 // -------------------- tiny HTTP helpers --------------------

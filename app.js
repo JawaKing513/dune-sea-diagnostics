@@ -929,7 +929,18 @@ function blockSlotServer(startISO, shouldBlock){
 
 function findAppointmentByStart(startISO){
   const all = getAllScheduleRows();
-  return all.find(a => a.startISO === startISO && (a.status==="pending" || a.status==="accepted")) || null;
+
+  // Compare by actual time instant (ms since epoch) instead of raw string equality.
+  // This avoids mismatches when one client sends an ISO string without timezone suffix ("Z")
+  // while another sends a full UTC ISO string. Both represent the same moment.
+  const target = Date.parse(String(startISO || ""));
+  if(!Number.isFinite(target)) return null;
+
+  return all.find(a => {
+    if(!(a && (a.status==="pending" || a.status==="accepted"))) return false;
+    const t = Date.parse(String(a.startISO || ""));
+    return Number.isFinite(t) && t === target;
+  }) || null;
 }
 
 /**
