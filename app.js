@@ -344,6 +344,36 @@ async function postSchedule(path, payload){
 const STORAGE_KEY = "dsd_site_v1";
 const ADMIN_MODE_KEY = "dsd_admin_mode_v1";
 
+const MY_REQ_KEY = "dsd_my_requests_v1";
+
+function loadMyRequests(){
+  try{
+    const raw = localStorage.getItem(MY_REQ_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(_){ return []; }
+}
+function saveMyRequests(arr){
+  try{ localStorage.setItem(MY_REQ_KEY, JSON.stringify(arr)); }catch(_){}
+}
+function rememberMyRequest(appt){
+  if(!appt || !appt.id) return;
+  const arr = loadMyRequests();
+  const idx = arr.findIndex(x => x && x.id === appt.id);
+  const row = { id: appt.id, startISO: appt.startISO, createdISO: appt.createdISO || new Date().toISOString() };
+  if(idx >= 0) arr[idx] = { ...arr[idx], ...row };
+  else arr.unshift(row);
+  // keep it small
+  const trimmed = arr.slice(0, 50);
+  saveMyRequests(trimmed);
+}
+function isMyRequestId(id){
+  if(!id) return false;
+  const arr = loadMyRequests();
+  return arr.some(x => x && x.id === id);
+}
+
+
 function getPersistedAdmin(){
   try{ return localStorage.getItem(ADMIN_MODE_KEY) === "1"; }
   catch(e){ return false; }
@@ -743,15 +773,17 @@ function renderCalendar(){
       const start = new Date(day);
       start.setHours(hh, mm, 0, 0);
 
-      const online = serverOnline();
+      const onlineSchedule = !!serverSchedule.online;
+      const onlineAvail = !!serverAvailability.online;
+      const online = onlineSchedule;
       const appt = online ? findAppointmentByStart(start.toISOString()) : null;
       const dow = day.getDay();
-      const weeklyConf = (online ? (serverAvailability.weekly?.[String(dow)] ?? serverAvailability.weekly?.[dow]) : null);
-      const weeklyEnabled = !!weeklyConf?.enabled;
+      const weeklyConf = (onlineAvail ? (serverAvailability.weekly?.[String(dow)] ?? serverAvailability.weekly?.[dow]) : null);
+      const weeklyEnabled = onlineAvail ? !!weeklyConf?.enabled : !!state.availability.weekly?.[String(dow)]?.enabled;
       const wStart = Number(weeklyConf?.start ?? state.availability.weekly?.[String(dow)]?.start ?? state.settings.openHour);
       const wEnd = Number(weeklyConf?.end ?? state.availability.weekly?.[String(dow)]?.end ?? state.settings.closeHour);
       const withinWeekly = (weeklyEnabled && hh >= wStart && hh < wEnd);
-      const blocked = online ? isBlockedServer(dayISO, hh, mm) : false;
+      const blocked = onlineAvail ? isBlockedServer(dayISO, hh, mm) : false;
 
       let cls = "slot";
       let text = "Available";
