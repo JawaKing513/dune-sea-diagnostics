@@ -294,6 +294,43 @@ function serverOnline(){
   return !!(serverSchedule.online && serverAvailability.online);
 }
 
+// Keep schedule UI in sync across devices (phone/browser) by periodically refreshing
+let _scheduleSyncTimer = null;
+let _lastScheduleSig = "";
+function scheduleSignature(){
+  // cheap signature: counts + latest timestamps
+  const booked = Array.isArray(serverSchedule.booked) ? serverSchedule.booked : [];
+  const pending = Array.isArray(serverSchedule.pending) ? serverSchedule.pending : [];
+  const maxTs = (arr)=> arr.reduce((m,a)=> Math.max(m, Date.parse(a?.createdISO||a?.startISO||0) || 0), 0);
+  return [
+    booked.length,
+    pending.length,
+    maxTs(booked),
+    maxTs(pending),
+  ].join("|");
+}
+async function syncScheduleUI(force){
+  if(!$("#calGrid") && !$("#pendingTableBody") && !$("#acceptedTableBody")) return;
+  await loadServerSchedule();
+  const sig = scheduleSignature();
+  if(force || sig !== _lastScheduleSig){
+    _lastScheduleSig = sig;
+    if($("#calGrid")) renderCalendar();
+    if(isAdmin && ($("#pendingTableBody") || $("#acceptedTableBody"))) renderAppointmentsTables();
+  }
+}
+function startScheduleAutoSync(){
+  if(_scheduleSyncTimer) return;
+  // initial signature after first load
+  _lastScheduleSig = scheduleSignature();
+  _scheduleSyncTimer = setInterval(()=>{
+    // Don't spam when tab is hidden
+    if(document.hidden) return;
+    syncScheduleUI(false).catch(()=>{});
+  }, 15000);
+  window.addEventListener("focus", ()=> syncScheduleUI(true).catch(()=>{}));
+}
+
 function getAllScheduleRows(){
   // Normalized for existing UI (status: pending/accepted)
   const booked = serverSchedule.booked.map(a => ({ ...a, status:"accepted" }));
@@ -584,6 +621,11 @@ async function init(){
 if($("#calGrid")) renderCalendar();
   if($("#adminPanel")) renderAdminPanels();
   if($("#pendingTableBody") || $("#acceptedTableBody")) renderAppointmentsTables();
+
+  // Cross-device freshness (phone <-> browser)
+  if($("#calGrid") || $("#pendingTableBody") || $("#acceptedTableBody")){
+    startScheduleAutoSync();
+  }
 }
 
 function renderInventory(){
@@ -725,12 +767,18 @@ function renderCalendar(){
         cls += " unavail";
         text = "Temporarily Unavailable";
       }else if(appt){
-        if(appt.status === "pending"){
-          cls += " pending";
-          text = "Awaiting Confirmation";
-        }else if(appt.status === "accepted"){
-          cls += " taken";
-          text = "Reserved";
+        // Admin sees explicit status, public sees a clean, generic "Unavailable"
+        if(!isAdmin){
+          cls += " unavail";
+          text = "Unavailable";
+        }else{
+          if(appt.status === "pending"){
+            cls += " pending";
+            text = "Awaiting Confirmation";
+          }else if(appt.status === "accepted"){
+            cls += " taken";
+            text = "Reserved";
+          }
         }
       }else if(blocked){
         cls += " blocked";

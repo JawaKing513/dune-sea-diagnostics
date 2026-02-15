@@ -187,6 +187,8 @@ async function loadServerSchedule(){
     serverSchedule.booked = Array.isArray(j.booked) ? j.booked : [];
     serverSchedule.pending = Array.isArray(j.pending) ? j.pending : [];
     serverSchedule.online = true;
+    // Keep customer's local Pending/Reserved tags in sync with the server
+    reconcileLocalAppointmentsWithServer();
 
     console.log(`[schedule] server online. booked=${serverSchedule.booked.length} pending=${serverSchedule.pending.length}`);
     try{
@@ -281,6 +283,43 @@ async function postAvailability(path, payload){
 
 function serverOnline(){
   return !!(serverSchedule.online && serverAvailability.online);
+}
+
+// Keep schedule UI in sync across devices (phone/browser) by periodically refreshing
+let _scheduleSyncTimer = null;
+let _lastScheduleSig = "";
+function scheduleSignature(){
+  // cheap signature: counts + latest timestamps
+  const booked = Array.isArray(serverSchedule.booked) ? serverSchedule.booked : [];
+  const pending = Array.isArray(serverSchedule.pending) ? serverSchedule.pending : [];
+  const maxTs = (arr)=> arr.reduce((m,a)=> Math.max(m, Date.parse(a?.createdISO||a?.startISO||0) || 0), 0);
+  return [
+    booked.length,
+    pending.length,
+    maxTs(booked),
+    maxTs(pending),
+  ].join("|");
+}
+async function syncScheduleUI(force){
+  if(!$("#calGrid") && !$("#pendingTableBody") && !$("#acceptedTableBody")) return;
+  await loadServerSchedule();
+  const sig = scheduleSignature();
+  if(force || sig !== _lastScheduleSig){
+    _lastScheduleSig = sig;
+    if($("#calGrid")) renderCalendar();
+    if(isAdmin && ($("#pendingTableBody") || $("#acceptedTableBody"))) renderAppointmentsTables();
+  }
+}
+function startScheduleAutoSync(){
+  if(_scheduleSyncTimer) return;
+  // initial signature after first load
+  _lastScheduleSig = scheduleSignature();
+  _scheduleSyncTimer = setInterval(()=>{
+    // Don't spam when tab is hidden
+    if(document.hidden) return;
+    syncScheduleUI(false).catch(()=>{});
+  }, 15000);
+  window.addEventListener("focus", ()=> syncScheduleUI(true).catch(()=>{}));
 }
 
 function getAllScheduleRows(){
@@ -576,6 +615,11 @@ async function init(){
 if($("#calGrid")) renderCalendar();
   if($("#adminPanel")) renderAdminPanels();
   if($("#pendingTableBody") || $("#acceptedTableBody")) renderAppointmentsTables();
+
+  // Cross-device freshness (phone <-> browser)
+  if($("#calGrid") || $("#pendingTableBody") || $("#acceptedTableBody")){
+    startScheduleAutoSync();
+  }
 }
 
 function renderInventory(){
@@ -717,12 +761,33 @@ function renderCalendar(){
         cls += " unavail";
         text = "Temporarily Unavailable";
       }else if(appt){
-        if(appt.status === "pending"){
-          cls += " pending";
-          text = "Awaiting Confirmation";
-        }else if(appt.status === "accepted"){
-          cls += " taken";
-          text = "Reserved";
+        // Admin sees explicit status; public sees generic Unavailable,
+        // except for the current customer's own request (local feedback layer).
+        if(!isAdmin){
+          const mine = findLocalAppointmentById(appt.id);
+          if(mine){
+            if(appt.status === "pending"){
+              cls += " pending";
+              text = "Pending";
+            }else if(appt.status === "accepted"){
+              cls += " taken";
+              text = "Reserved";
+            }else{
+              cls += " unavail";
+              text = "Unavailable";
+            }
+          }else{
+            cls += " unavail";
+            text = "Unavailable";
+          }
+        }else{
+          if(appt.status === "pending"){
+            cls += " pending";
+            text = "Awaiting Confirmation";
+          }else if(appt.status === "accepted"){
+            cls += " taken";
+            text = "Reserved";
+          }
         }
       }else if(blocked){
         cls += " blocked";
@@ -833,6 +898,58 @@ function blockSlotServer(startISO, shouldBlock){
 function findAppointmentByStart(startISO){
   const all = getAllScheduleRows();
   return all.find(a => a.startISO === startISO && (a.status==="pending" || a.status==="accepted")) || null;
+}
+
+/**
+ * Customer feedback layer (localStorage):
+ * We keep a small list of "my" requests locally so the customer can see
+ * Pending/Reserved for their own slot, while everyone else sees "Unavailable".
+ *
+ * This is intentionally local-only (no login/session). If the customer switches
+ * devices, they won't see their tags — that's expected unless we add identity.
+ */
+function findLocalAppointmentById(id){
+  if(!id) return null;
+  const arr = Array.isArray(state.appointments) ? state.appointments : [];
+  return arr.find(a => a && a.id === id) || null;
+}
+
+function reconcileLocalAppointmentsWithServer(){
+  // Only applies to non-admin (customer) view.
+  if(isAdmin) return;
+  const arr = Array.isArray(state.appointments) ? state.appointments : [];
+  if(!arr.length) return;
+
+  const booked = Array.isArray(serverSchedule.booked) ? serverSchedule.booked : [];
+  const pending = Array.isArray(serverSchedule.pending) ? serverSchedule.pending : [];
+
+  const bookedIds = new Set(booked.map(a=>a?.id).filter(Boolean));
+  const pendingIds = new Set(pending.map(a=>a?.id).filter(Boolean));
+
+  const now = Date.now();
+  const next = [];
+
+  for(const a of arr){
+    if(!a || !a.id || !a.startISO) continue;
+
+    let status = a.status || "pending";
+    if(bookedIds.has(a.id)) status = "accepted";
+    else if(pendingIds.has(a.id)) status = "pending";
+    else{
+      // If the server no longer has this ID, keep it briefly so the user
+      // doesn't lose feedback instantly (helps on flaky connections).
+      const t = Date.parse(a.createdISO || a.startISO);
+      const ageDays = Number.isFinite(t) ? (now - t) / 86400000 : 999;
+      if(ageDays > 2) continue; // drop stale after 48h
+    }
+
+    next.push({ ...a, status });
+  }
+
+  // Light prune: keep list from growing forever
+  next.sort((x,y)=>String(y.createdISO||y.startISO).localeCompare(String(x.createdISO||x.startISO)));
+  state.appointments = next.slice(0, 25);
+  try{ saveState(state); }catch(e){}
 }
 
 function openRequestModal(startISO){
@@ -987,7 +1104,15 @@ function onSubmitRequest(e){
 
   postSchedule(endpoint, appt)
     .then(async ()=>{
-      await loadServerSchedule();
+      // For customers, keep a local record so they can see Pending/Reserved feedback
+      // for *their* request only (others still appear as generic Unavailable).
+      if(!isAdmin){
+        const arr = Array.isArray(state.appointments) ? state.appointments : [];
+        state.appointments = [{ ...appt, status: "pending" }, ...arr.filter(x=>x && x.id !== appt.id)].slice(0, 25);
+        saveState(state);
+      }
+
+      await loadServerSchedule(); // also reconciles local tags with server
       closeModal();
       toast(isAdmin ? "Booked." : "Request submitted!");
       renderCalendar();
